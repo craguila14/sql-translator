@@ -14,6 +14,7 @@ import { QueriesModule } from './queries/queries.module';
           isGlobal: true,
         }),
         TypeOrmModule.forRoot({
+          ssl: true,
           type: 'postgres',
           host: process.env.DB_HOST,
           port: +process.env.DB_PORT!,
