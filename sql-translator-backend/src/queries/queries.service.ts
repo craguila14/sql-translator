@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, BadRequestException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
@@ -6,8 +6,8 @@ import { TRANSLATOR_PROMPT } from './prompts/translator.prompt';
 
 @Injectable()
 export class QueriesService implements OnModuleInit {
-  private genAI: GoogleGenerativeAI;
-  private model: GenerativeModel;
+  private genAI!: GoogleGenerativeAI;
+  private model!: GenerativeModel;
 
   constructor(
     private dataSource: DataSource,
@@ -32,9 +32,11 @@ export class QueriesService implements OnModuleInit {
 
     const generatedSql = await this.getSqlFromAI(prompt);
 
+    this.validateReadOnlySql(generatedSql);
+
     try {
       const result = await this.dataSource.query(generatedSql);
-      
+
       return {
         pregunta: question,
         sql: generatedSql,
@@ -44,8 +46,33 @@ export class QueriesService implements OnModuleInit {
       return {
         error: 'La IA generó un SQL que la base de datos no pudo ejecutar.',
         sqlIntentado: generatedSql,
-        detalles: error.message,
+        detalles: error instanceof Error ? error.message : String(error),
       };
+    }
+  }
+
+  private validateReadOnlySql(sql: string): void {
+    const normalized = sql.trim().toUpperCase();
+
+    if (!normalized.startsWith('SELECT')) {
+      throw new BadRequestException(
+        'Operación no permitida: solo se aceptan consultas de lectura (SELECT).',
+      );
+    }
+
+    const forbiddenKeywords = [
+      'DELETE', 'UPDATE', 'INSERT', 'DROP', 'ALTER',
+      'TRUNCATE', 'CREATE', 'GRANT', 'REVOKE', 'REPLACE',
+      'MERGE', 'UPSERT', 'EXECUTE', 'EXEC', 'CALL',
+    ];
+
+    for (const keyword of forbiddenKeywords) {
+      const regex = new RegExp(`\\b${keyword}\\b`);
+      if (regex.test(normalized)) {
+        throw new BadRequestException(
+          `Operación no permitida: la consulta contiene la instrucción "${keyword}" que no está permitida.`,
+        );
+      }
     }
   }
 
@@ -58,7 +85,7 @@ export class QueriesService implements OnModuleInit {
       
       return text;
     } catch (error) {
-      throw new Error('Error al conectar con el servicio de IA: ' + error.message);
+      throw new Error('Error al conectar con el servicio de IA: ' + (error instanceof Error ? error.message : String(error)));
     }
   }
 
