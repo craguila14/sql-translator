@@ -1,4 +1,4 @@
-import { Venta } from 'src/ventas/ventas.entity';
+import { Venta } from '../ventas/ventas.entity';
 import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
 
 @Entity({ name: 'clientes' })
